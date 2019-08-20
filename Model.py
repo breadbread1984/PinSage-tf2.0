@@ -82,8 +82,7 @@ class PinSage(tf.keras.Model):
         weights[f,t] = 1.;
     weights = tf.constant(weights);
     # normalize adjacent matrix line by line.
-    line_sum = tf.math.reduce_sum(weights, axis = 1) + 1e-6;
-    line_sum = tf.expand_dims(line_sum, 1);
+    line_sum = tf.math.reduce_sum(weights, axis = 1, keepdims = True) + 1e-6;
     normalized = weights / line_sum;
     # dampping vector.
     dampping = tf.ones((len(graph.nodes),), dtype = tf.float32);
@@ -97,8 +96,11 @@ class PinSage(tf.keras.Model):
       if tf.equal(tf.less(d,1e-4),True): break;
       v = v_updated;
     # edge weight is calculated by multiply of two related nodes.
-    weights = tf.linalg.matmul(tf.transpose(v),v);
-    return weights;
+    weights = tf.math.minimum(weights, tf.linalg.matmul(tf.transpose(v),v));
+    # normalized edge weights line by line.
+    line_sum = tf.math.reduce_sum(weights, axis = 1, keepdims = True) + 1e-6;
+    normalized = weights / line_sum;
+    return normalized;
 
 if __name__ == "__main__":
 
@@ -110,8 +112,6 @@ if __name__ == "__main__":
   g.add_node(3);
   g.add_edge(0,1);
   g.add_edge(0,2);
-  g.add_edge(0,3);
-  g.add_edge(1,2);
   g.add_edge(2,3);
   pinsage = PinSage([10,10,10], g);
 
