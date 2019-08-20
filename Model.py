@@ -79,6 +79,15 @@ class PinSage(tf.keras.Model):
     # embeddings.shape = (batch, node number, in channels)
     embeddings = inputs[0];
     tf.debugging.Assert(tf.equal(tf.shape(embeddings)[1] == tf.shape(self.edge_weights)[0]), [embeddings.shape]);
+    # sample_neighbor_num.shape = ()
+    sample_neighbor_num = inputs[1];
+    tf.debugging.Assert(tf.equal(tf.shape(tf.shape(sample_neighbor_num))[0], 0), [sample_neighbor_num]);
+    # sample a fix number of neighbors according to edge weights.
+    # neighbor_set.shape = (node num, neighbor num)
+    neighbor_set = tf.random.categorical(self.edge_weights, sample_neighbor_num);
+    for conv in self.convs:
+      embeddings = conv([embeddings, self.edge_weights, neighbor_set]);
+    return embeddings;
 
   def pagerank(self, graph, damp_rate = 0.2):
 
@@ -107,10 +116,7 @@ class PinSage(tf.keras.Model):
       v = v_updated;
     # edge weight is calculated by multiply of two related nodes.
     weights = tf.math.minimum(weights, tf.linalg.matmul(tf.transpose(v),v));
-    # normalized edge weights line by line.
-    line_sum = tf.math.reduce_sum(weights, axis = 1, keepdims = True) + 1e-6;
-    normalized = weights / line_sum;
-    return normalized;
+    return weights;
 
 if __name__ == "__main__":
 
