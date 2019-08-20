@@ -114,8 +114,8 @@ class PinSage(tf.keras.Model):
       d = tf.norm(v_updated - v);
       if tf.equal(tf.less(d,1e-4),True): break;
       v = v_updated;
-    # edge weight is calculated by multiply of two related nodes.
-    weights = tf.math.minimum(weights, tf.linalg.matmul(tf.transpose(v),v));
+    # edge weight is pagerank.
+    weights = weights * tf.tile(v,(tf.shape(weights)[0],1));
     return weights;
 
 if __name__ == "__main__":
@@ -130,4 +130,5 @@ if __name__ == "__main__":
   g.add_edge(0,2);
   g.add_edge(2,3);
   pinsage = PinSage([10,10,10], g);
+  print(pinsage.edge_weights)
 
