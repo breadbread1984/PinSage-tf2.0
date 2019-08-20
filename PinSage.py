@@ -116,7 +116,9 @@ class PinSage(tf.keras.Model):
       v = v_updated;
     # edge weight is pagerank.
     weights = weights * tf.tile(v,(tf.shape(weights)[0],1));
-    return weights;
+    line_sum = tf.math.reduce_sum(weights, axis = 1, keepdims = True) + 1e-6;
+    normalized = weights / line_sum;
+    return normalized;
 
 if __name__ == "__main__":
 
