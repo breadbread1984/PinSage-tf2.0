@@ -1,24 +1,21 @@
 #!/usr/bin/python3
 
 import tensorflow as tf;
+import networkx as nx;
 
 class Convolve(tf.keras.Model):
 
-  def __init__(self, in_channels, hidden_channels, out_channels):
+  def __init__(self, hidden_channels):
 
     super(Convolve, self).__init__();
     self.Q = tf.keras.layers.Dense(units = hidden_channels, activation = tf.keras.layers.LeakyReLU());
-    self.W = tf.keras.layers.Dense(units = out_channels, activation = tf.keras.layers.LeakyReLU());
-    self.in_channels = in_channels;
-    self.hidden_channels = hidden_channels;
-    self.out_channels = out_channels;
+    self.W = tf.keras.layers.Dense(units = hidden_channels, activation = tf.keras.layers.LeakyReLU());
 
   def call(self, inputs):
 
     # embeddings.shape = (batch, node number, in_channels)
     embeddings = inputs[0];
     tf.debugging.Assert(tf.equal(tf.shape(tf.shape(embeddings))[0], 3), [embeddings.shape]);
-    tf.debugging.Assert(tf.equal(tf.shape(embeddings)[2], self.in_channels), [embeddings.shape]);
     # weights.shape = (node number, node number)
     weights = inputs[1];
     tf.debugging.Assert(tf.equal(tf.shape(tf.shape(weights))[0], 2), [weights.shape]);
@@ -45,13 +42,34 @@ class Convolve(tf.keras.Model):
     node_embedding = tf.keras.layers.Lambda(lambda x, node_id: tf.squeeze(tf.gather(x, [node_id], axis = 1), axis = 1), arguments = {'node_id': node_id})(embeddings);
     # concated_hidden.shape = (batch, in_channels + hidden channels)
     concated_hidden = tf.keras.layers.Concatenate(axis = -1)([node_embedding, weighted_sum_hidden]);
-    # hidden_new.shape = (batch, out_channels)
+    # hidden_new.shape = (batch, hidden_channels)
     hidden_new = self.W(concated_hidden);
-    # normalized.shape = (batch, out_channels)
+    # normalized.shape = (batch, hidden_channels)
     normalized = tf.keras.layers.Lambda(lambda x: x / (tf.norm(x, axis = 1, keepdims = True) + 1e-6))(hidden_new);
     return normalized;
+
+class PinSage(tf.keras.Model):
+
+  def __init__(self, hidden_channels, graph):
+
+    # hidden_channels is list containing output channels of every convolve.
+    assert type(hidden_channels) is list;
+    assert type(graph) is nx.classes.graph.Graph;
+    super(PinSage, self).__init__();
+    # create convolves for every layer.
+    self.convs = list();
+    for i in range(len(hidden_channels)):
+      self.convs.append(Convolve(channels[i]));
+    # node id must from 0 to any nature number.
+    node_ids = sorted([id for id in graph.node]);
+    assert node_ids == list(range(len(node_ids)));
+    # get weight from pagerank.
+    
+  def call(self, inputs):
+
+    embeddings = inputs[0];
 
 if __name__ == "__main__":
 
   assert tf.executing_eagerly();
-  convolve = Convolve(10,10,10);
+  convolve = Convolve(10);
