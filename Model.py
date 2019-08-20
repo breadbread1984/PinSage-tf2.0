@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 
-import tensorflow as tf;
+import numpy as np;
 import networkx as nx;
+import tensorflow as tf;
 
 class Convolve(tf.keras.Model):
 
@@ -59,17 +60,58 @@ class PinSage(tf.keras.Model):
     # create convolves for every layer.
     self.convs = list();
     for i in range(len(hidden_channels)):
-      self.convs.append(Convolve(channels[i]));
-    # node id must from 0 to any nature number.
-    node_ids = sorted([id for id in graph.node]);
-    assert node_ids == list(range(len(node_ids)));
-    # get weight from pagerank.
+      self.convs.append(Convolve(hidden_channels[i]));
+    # get edge weights from pagerank. (from, to)
+    self.edge_weights = self.pagerank(graph);
     
   def call(self, inputs):
 
+    # embeddings.shape = (batch, node number, in channels)
     embeddings = inputs[0];
+    tf.debugging.Assert(tf.equal(tf.shape(embeddings)[1] == tf.shape(self.weights)[0]), [embeddings.shape]);
+
+  def pagerank(self, graph, damp_rate = 0.2):
+
+    # node id must from 0 to any nature number.
+    node_ids = sorted([id for id in graph.node]);
+    assert node_ids == list(range(len(node_ids)));
+    # adjacent matrix.
+    weights = np.zeros((len(graph.node), len(graph.node),), dtype = np.float32);
+    for f in graph.nodes:
+      for t in list(graph.adj[f]):
+        weights[f,t] = 1.;
+    weights = tf.constant(weights);
+    # normalize adjacent matrix line by line.
+    line_sum = tf.math.reduce_sum(weights, axis = 1) + 1e-6;
+    line_sum = tf.expand_dims(line_sum, 1);
+    normalized = weights / line_sum;
+    # dampping vector.
+    dampping = tf.ones((len(graph.nodes),), dtype = tf.float32);
+    dampping = dampping / tf.constant(len(graph.nodes), dtype = tf.float32);
+    dampping = tf.expand_dims(dampping, 0); # line vector.
+    # learning pagerank.
+    v = dampping;
+    while True:
+      v_updated = (1 - damp_rate) * tf.linalg.matmul(v, normalized) + damp_rate * dampping;
+      d = tf.norm(v_updated - v);
+      if tf.equal(tf.less(d,1e-4),True): break;
+      v = v_updated;
+    # edge weight is calculated by multiply of two related nodes.
+    weights = tf.linalg.matmul(tf.transpose(v),v);
+    return weights;
 
 if __name__ == "__main__":
 
   assert tf.executing_eagerly();
-  convolve = Convolve(10);
+  g = nx.Graph();
+  g.add_node(0);
+  g.add_node(1);
+  g.add_node(2);
+  g.add_node(3);
+  g.add_edge(0,1);
+  g.add_edge(0,2);
+  g.add_edge(0,3);
+  g.add_edge(1,2);
+  g.add_edge(2,3);
+  pinsage = PinSage([10,10,10], g);
+
