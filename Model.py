@@ -22,31 +22,41 @@ class Convolve(tf.keras.Model):
     tf.debugging.Assert(tf.equal(tf.shape(tf.shape(weights))[0], 2), [weights.shape]);
     tf.debugging.Assert(tf.equal(tf.shape(weights)[0], tf.shape(weights)[1]), [weights.shape]);
     tf.debugging.Assert(tf.equal(tf.shape(embeddings)[1], tf.shape(weights)[0]), [weights.shape]);
-    # neighbor_set.shape = (neighbor number);
+    # neighbor_set.shape = (node number, neighbor number);
     neighbor_set = inputs[2];
-    tf.debugging.Assert(tf.equal(tf.shape(tf.shape(neighbor_set))[0], 1), [neighbor_set.shape]);
-    # node_id.shape = ();
-    node_id = inputs[3];
-    tf.debugging.Assert(tf.equal(tf.shape(tf.shape(node_id))[0], 0), [node_id.shape]);
-    # neighbor_embeddings.shape = (batch, neighbor number, in channels)
-    neighbor_embeddings = tf.keras.layers.Lambda(lambda x, neighbor_set: tf.gather(x, neighbor_set, axis = 1), arguments = {'neighbor_set': neighbor_set})(embeddings);
-    # neighbor_hiddens.shape = (batch, neighbor number, hidden channels)
+    tf.debugging.Assert(tf.equal(tf.shape(tf.shape(neighbor_set))[0], 2), [neighbor_set.shape]);
+    # neighbor_embeddings.shape = (batch, node number, neighbor number, in channels)
+    # gather from tensor of dim (node number, batch, in_channel)
+    # with indices of dim (node number, neighbor num, 1)
+    # to get tensor of dim (node number, neighor num, batch, in_channel)
+    # transpose to get tensor of dim (batch, node_number, neighbor num, in channel)
+    neighbor_embeddings = tf.keras.layers.Lambda(lambda x, neighbor_set:
+      tf.transpose(
+        tf.gather_nd(
+          tf.transpose(x, (1, 0, 2)), 
+          tf.expand_dims(neighbor_set, axis = -1)
+        ),
+        (2, 0, 1, 3)
+      ), 
+      arguments = {'neighbor_set': neighbor_set}
+    )(embeddings);
+    # neighbor_hiddens.shape = (batch, node_number, neighbor number, hidden channels)
     neighbor_hiddens = self.Q(neighbor_embeddings);
-    # incoming weights.shape = (node number, 1)
-    incoming_weights = tf.keras.layers.Lambda(lambda x, node_id: tf.gather(x, [node_id], axis = 1), arguments = {'node_id': node_id})(weights);
-    # neighbor weights.shape = (1, neighbor number, 1)
-    neighbor_weights = tf.keras.layers.Lambda(lambda x, neighbor_set: tf.gather(x, neighbor_set, axis = 0), arguments = {'neighbor_set': neighbor_set})(incoming_weights);
-    neighbor_weights = tf.keras.layers.Lambda(lambda x: tf.expand_dims(x, 0))(neighbor_weights);
-    # weighted_sum_hidden.shape = (batch, hidden channels)
-    weighted_sum_hidden = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(x[0] * x[1], axis = 1) / (tf.math.reduce_sum(x[1], axis = 1) + 1e-6))([neighbor_hiddens, neighbor_weights]);
-    # node_embedding.shape = (batch, in_channels)
-    node_embedding = tf.keras.layers.Lambda(lambda x, node_id: tf.squeeze(tf.gather(x, [node_id], axis = 1), axis = 1), arguments = {'node_id': node_id})(embeddings);
-    # concated_hidden.shape = (batch, in_channels + hidden channels)
-    concated_hidden = tf.keras.layers.Concatenate(axis = -1)([node_embedding, weighted_sum_hidden]);
-    # hidden_new.shape = (batch, hidden_channels)
+    # indices.shape = (node_number, neighbor number, 2)
+    node_nums = tf.keras.layers.Lambda(lambda x: tf.tile(tf.expand_dims(tf.range(tf.shape(x)[0]), axis = 1),(1, tf.shape(x)[1])))(neighbor_set);
+    indices = tf.keras.layers.Lambda(lambda x: tf.stack(x, axis = -1))([node_nums, neighbor_set]);
+    # neighbor weights.shape = (node number, neighbor number)
+    neighbor_weights = tf.keras.layers.Lambda(lambda x, indices: tf.gather_nd(x, indices), arguments = {'indices': indices})(weights);
+    # neighbor_weights.shape = (1, node number, neighbor number, 1)
+    neighbor_weights = tf.keras.layers.Lambda(lambda x: tf.expand_dims(tf.expand_dims(x, 0), -1))(neighbor_weights);
+    # weighted_sum_hidden.shape = (batch, node_number, hidden channels)
+    weighted_sum_hidden = tf.keras.layers.Lambda(lambda x: tf.math.reduce_sum(x[0] * x[1], axis = 2) / (tf.math.reduce_sum(x[1], axis = 2) + 1e-6))([neighbor_hiddens, neighbor_weights]);
+    # concated_hidden.shape = (batch, node number, in_channels + hidden channels)
+    concated_hidden = tf.keras.layers.Concatenate(axis = -1)([embeddings, weighted_sum_hidden]);
+    # hidden_new.shape = (batch, node number, hidden_channels)
     hidden_new = self.W(concated_hidden);
-    # normalized.shape = (batch, hidden_channels)
-    normalized = tf.keras.layers.Lambda(lambda x: x / (tf.norm(x, axis = 1, keepdims = True) + 1e-6))(hidden_new);
+    # normalized.shape = (batch, node number, hidden_channels)
+    normalized = tf.keras.layers.Lambda(lambda x: x / (tf.norm(x, axis = 2, keepdims = True) + 1e-6))(hidden_new);
     return normalized;
 
 class PinSage(tf.keras.Model):
@@ -68,7 +78,7 @@ class PinSage(tf.keras.Model):
 
     # embeddings.shape = (batch, node number, in channels)
     embeddings = inputs[0];
-    tf.debugging.Assert(tf.equal(tf.shape(embeddings)[1] == tf.shape(self.weights)[0]), [embeddings.shape]);
+    tf.debugging.Assert(tf.equal(tf.shape(embeddings)[1] == tf.shape(self.edge_weights)[0]), [embeddings.shape]);
 
   def pagerank(self, graph, damp_rate = 0.2):
 
