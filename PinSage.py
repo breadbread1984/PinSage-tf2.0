@@ -61,24 +61,25 @@ class Convolve(tf.keras.Model):
 
 class PinSage(tf.keras.Model):
 
-  def __init__(self, hidden_channels, graph):
+  def __init__(self, hidden_channels, graph = None, edge_weights = None):
 
     # hidden_channels is list containing output channels of every convolve.
     assert type(hidden_channels) is list;
-    assert type(graph) is nx.classes.graph.Graph;
+    if graph is not None: assert type(graph) is nx.classes.graph.Graph;
+    if edge_weights is not None: assert type(edge_weights) is list;
     super(PinSage, self).__init__();
     # create convolves for every layer.
     self.convs = list();
     for i in range(len(hidden_channels)):
       self.convs.append(Convolve(hidden_channels[i]));
     # get edge weights from pagerank. (from, to)
-    self.edge_weights = self.pagerank(graph);
+    self.edge_weights = self.pagerank(graph) if graph is not None else edge_weights;
     
   def call(self, inputs):
 
     # embeddings.shape = (batch, node number, in channels)
     embeddings = inputs[0];
-    tf.debugging.Assert(tf.equal(tf.shape(embeddings)[1] == tf.shape(self.edge_weights)[0]), [embeddings.shape]);
+    tf.debugging.Assert(tf.equal(tf.shape(embeddings)[1], tf.shape(self.edge_weights)[0]), [embeddings.shape]);
     # sample_neighbor_num.shape = ()
     sample_neighbor_num = inputs[1];
     tf.debugging.Assert(tf.equal(tf.shape(tf.shape(sample_neighbor_num))[0], 0), [sample_neighbor_num]);
