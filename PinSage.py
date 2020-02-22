@@ -93,10 +93,10 @@ class PinSage(tf.keras.Model):
   def pagerank(self, graph, damp_rate = 0.2):
 
     # node id must from 0 to any nature number.
-    node_ids = sorted([id for id in graph.node]);
+    node_ids = sorted([id for id in graph.nodes]);
     assert node_ids == list(range(len(node_ids)));
     # adjacent matrix.
-    weights = np.zeros((len(graph.node), len(graph.node),), dtype = np.float32);
+    weights = np.zeros((len(graph.nodes), len(graph.nodes),), dtype = np.float32);
     for f in graph.nodes:
       for t in list(graph.adj[f]):
         weights[f,t] = 1.;
